@@ -27,16 +27,22 @@ class TestClass
 }");
         }
 
-    [Fact]
-    public void HexAndBinaryLiterals()
-    {
-    TestConversionVisualBasicToCSharp(
+        [Fact]
+        public void HexAndBinaryLiterals()
+        {
+        TestConversionVisualBasicToCSharp(
         @"Class Test
     Public CR As Integer = &HD * &B1
 End Class", @"class Test
 {
     public int CR = 0xD * 0b1;
 }");
+        }
+
+        [Fact(Skip = "Manual test")]
+        public void ConvertSolutionToCSharp()
+        {
+            ConvertAllProjectsToCSharp("");
         }
     }
 }

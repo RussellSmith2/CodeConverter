@@ -119,8 +119,18 @@ End Class";
         public string GetWarningsOrNull()
         {
             var finalCompilation = CreateCompilation(_secondPassResults);
+            var sourceErrors = GetDiagnostics(_sourceCompilation);
             var targetErrors = GetDiagnostics(finalCompilation);
-            return targetErrors.Any() ? $"{targetErrors.Count} resulting compilation errors:{Environment.NewLine}{string.Join(Environment.NewLine, targetErrors)}" : null;
+
+            if (sourceErrors.Any())
+                return DescribeErrors(sourceErrors, "source");
+
+            return targetErrors.Any() ? DescribeErrors(targetErrors, "converted") : null;
+        }
+
+        private static string DescribeErrors(List<string> errors, string compilationPhase)
+        {
+            return $"{errors.Count} {compilationPhase} compilation errors:{Environment.NewLine}{string.Join(Environment.NewLine, errors)}";
         }
 
         private static List<string> GetDiagnostics(Compilation compilation)

@@ -51,7 +51,6 @@ namespace CodeConverter.VsExtension
             var errors = new List<string>();
             string longestFilePath = null;
             var longestFileLength = -1;
-
             var solutionDir = Path.GetDirectoryName(_visualStudioWorkspace.CurrentSolution.FilePath);
             VisualStudioInteraction.OutputWindow.WriteToOutputWindow(Intro);
             VisualStudioInteraction.OutputWindow.ForceShowOutputPane();
@@ -196,7 +195,6 @@ namespace CodeConverter.VsExtension
             var convertedFiles = ProjectConversion<TLanguageConversion>.ConvertProjects(projects);
             return convertedFiles;
         }
-
         void WriteStatusBarText(string text)
         {
             IVsStatusbar statusBar = (IVsStatusbar)_serviceProvider.GetService(typeof(SVsStatusbar));
