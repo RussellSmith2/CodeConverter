@@ -39,10 +39,10 @@ End Class", @"class Test
 }");
         }
 
-        [Fact(Skip = "Manual test")]
+        [Fact]
         public void ConvertSolutionToCSharp()
         {
-            ConvertAllProjectsToCSharp("");
+            ConvertAllProjectsToCSharp(@"C:\Users\Graham\Documents\Work\Survey-Platform\MIG.Survey.Platform.sln");
         }
     }
 }
