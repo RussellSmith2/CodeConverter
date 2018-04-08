@@ -24,6 +24,17 @@ namespace ICSharpCode.CodeConverter.Shared
         private readonly TLanguageConversion _languageConversion;
         private readonly bool _handlePartialConversion;
 
+        private static readonly IReadOnlyCollection<(string, string)> VbToCsTypeGuidReplacements = new [] {
+            ("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}", "{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}"), // Standard project
+            ("{CB4CE8C6-1BDB-4DC7-A4D3-65A1999772F8}", "{20D4826A-C6FA-45DB-90F4-C717570B9F32}"), // Legacy (2003) Smart Device
+            ("{68B1623D-7FB9-47D8-8664-7ECEA3297D4F}", "{4D628B5B-2FBC-4AA6-8C16-197242AEB884}"), // Smart Device
+            ("{D59BE175-2ED0-4C54-BE3D-CDAA9F3214C8}", "{14822709-B5A1-4724-98CA-57A101D1B079}"), // Workflow
+            ("{593B0543-81F6-4436-BA1E-4747859CAAE2}", "{EC05E597-79D4-47f3-ADA0-324C4F7C7484}"), // SharePoint
+            ("{DB03555F-0C8B-43BE-9FF9-57896B3C5E56}", "{C089C8C0-30E0-4E22-80C0-CE093F111A43}") // Store App Windows Phone 8.1 Silverlight
+        };
+
+        private static IReadOnlyCollection<(string, string)> CsToVbTypeGuidReplacements => VbToCsTypeGuidReplacements.Select((vbCs, i) => (vbCs.Item2, vbCs.Item1)).ToArray();
+
         private ProjectConversion(Compilation sourceCompilation, string solutionDir)
             : this(sourceCompilation, sourceCompilation.SyntaxTrees.Where(t => t.FilePath.StartsWith(solutionDir)))
         {
@@ -66,33 +77,50 @@ namespace ICSharpCode.CodeConverter.Shared
         {
             var solutionFilePath = projects.First().Solution.FilePath;
             var solutionDir = Path.GetDirectoryName(solutionFilePath);
-            CreateNewSolution(solutionFilePath);
+            IReadOnlyCollection<(string, string)> replacements = CreateNewSolution(solutionFilePath, projects);
+            replacements = replacements.Concat(new[] {(".vb\"", ".cs\""), (".vb<", ".cs<")}).ToList();
             foreach (var project in projects) {
-                CreateNewProjFile(project);
+                CreateNewProjFile(project, replacements);
                 var compilation = project.GetCompilationAsync().GetAwaiter().GetResult();
                 var projectConversion = new ProjectConversion<TLanguageConversion>(compilation, solutionDir);
                 foreach (var conversionResult in ConvertProject(projectConversion)) yield return conversionResult;
             }
         }
 
-        // TODO: Make work for both directions, and only convert selected projects
-        private static void CreateNewProjFile(Project project)
+        // TODO: Make work for both directions
+        private static void CreateNewProjFile(Project project,
+            IReadOnlyCollection<(string, string)> replacements)
         {
             var newProjectPath = Path.ChangeExtension(project.FilePath, ".csproj");
             var oldProjectText = File.ReadAllText(project.FilePath);
-            var newProjectText = oldProjectText.Replace(".vb\"", ".cs\"");
+            var newProjectText = oldProjectText;
+            foreach (var (oldValue, newValue) in replacements) {
+                newProjectText = Regex.Replace(newProjectText, oldValue, newValue, RegexOptions.IgnoreCase);
+            }
             File.WriteAllText(newProjectPath, newProjectText);
         }
 
-        // TODO: Make work for both directions, and only convert selected projects
-        private static void CreateNewSolution(string solutionFilePath)
+        // TODO: Make work for both directions
+        private static IReadOnlyCollection<(string, string)> CreateNewSolution(string solutionFilePath, IReadOnlyCollection<Project> projects)
         {
-            var contents = File.ReadAllText(solutionFilePath)
-                .Replace(".vbproj", ".csproj");
-            var regex = new Regex(@"(Project\("")({[0-9A-F\-]*})(""\) =)");
-            var guid = Guid.NewGuid().ToString("B");
-            contents = regex.Replace(contents, $"$1{guid}$3");
+            var contents = File.ReadAllText(solutionFilePath);
+            var replacements = VbToCsTypeGuidReplacements.ToList(); //TODO For solution file only apply for specific projects being converted
+            foreach (var project in projects) {
+                var projFilename = Path.GetFileName(project.FilePath);
+                replacements.Add((projFilename, Path.ChangeExtension(projFilename, ".csproj")));
+                var projGuidRegex = new Regex(projFilename + @""", ""({[0-9A-Fa-f\-]{32,36}})("")");
+                var newProjectGuid = Guid.NewGuid().ToString("B").ToUpperInvariant();
+                var projGuidMatch = projGuidRegex.Match(contents);
+                replacements.Add((projGuidMatch.Groups[1].Value, newProjectGuid));
+            }
+
+            replacements.Add(("\\\\Microsoft.VisualBasic.targets", "\\Microsoft.CSharp.targets"));
+
+            foreach (var (oldValue, newValue) in replacements) {
+                contents = Regex.Replace(contents, oldValue, newValue, RegexOptions.IgnoreCase);
+            }
             File.WriteAllText(Path.ChangeExtension(solutionFilePath, ".converted.sln"), contents);
+            return replacements;
         }
 
         private static IEnumerable<ConversionResult> ConvertProject(ProjectConversion<TLanguageConversion> projectConversion)
@@ -115,7 +143,7 @@ namespace ICSharpCode.CodeConverter.Shared
         {
             FirstPass();
             var secondPassByFilePath = SecondPass();
-#if DEBUG
+#if DEBUG && false
             AddProjectWarnings();
 #endif
             return secondPassByFilePath;
